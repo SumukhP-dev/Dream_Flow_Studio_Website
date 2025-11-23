@@ -143,4 +143,14 @@ jobs:
           npm run build:web
         env:
           EXPO_PUBLIC_API_BASE_URL: http://localhost:3000/api/v1
+      
+      - name: Build Docker images
+        run: |
+          docker build -t dreamflow-backend:test ./backend
+          docker build -t dreamflow-frontend:test ./frontend
+      
+      - name: Test Docker images
+        run: |
+          docker run --rm dreamflow-backend:test node -e "console.log('Backend image OK')"
+          docker run --rm dreamflow-frontend:test nginx -t
 
