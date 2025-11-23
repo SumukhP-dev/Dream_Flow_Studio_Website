@@ -3,6 +3,7 @@ import { Text, TextInput, Button } from "react-native-paper";
 import { useState } from "react";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/lib/hooks/useAuth";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
@@ -15,7 +16,13 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await login(email, password);
-      router.replace("/(tabs)/generator");
+      // Check if user has completed onboarding
+      const onboardingCompleted = await AsyncStorage.getItem('@dreamflow:onboarding_completed');
+      if (onboardingCompleted === 'true') {
+        router.replace("/(tabs)/generator");
+      } else {
+        router.replace("/(onboarding)");
+      }
     } catch (error) {
       console.error("Login failed:", error);
       // TODO: Show error message
