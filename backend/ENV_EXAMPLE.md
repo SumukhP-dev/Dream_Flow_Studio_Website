@@ -19,6 +19,15 @@ REFRESH_TOKEN_EXPIRY=30d
 # OpenAI API
 OPENAI_API_KEY=sk-your-openai-api-key
 
+# Media Generation Providers
+# Video: 'runwayml' or 'placeholder'
+VIDEO_PROVIDER=placeholder
+RUNWAY_API_KEY=your-runway-api-key
+
+# Audio: 'openai', 'elevenlabs', or 'placeholder'
+AUDIO_PROVIDER=openai
+ELEVENLABS_API_KEY=your-elevenlabs-api-key
+
 # CORS Configuration
 CORS_ORIGIN=http://localhost:19006,http://localhost:3000
 FRONTEND_URL=http://localhost:19006
