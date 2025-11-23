@@ -19,6 +19,8 @@ export interface RichTextEditorProps {
   minHeight?: number;
   autoFocus?: boolean;
   onBlur?: () => void;
+  onSave?: () => void;
+  showWordCount?: boolean;
 }
 
 type FormatType = 'bold' | 'italic' | 'underline' | 'heading' | 'list';
@@ -30,9 +32,15 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   minHeight = 200,
   autoFocus = false,
   onBlur,
+  onSave,
+  showWordCount = true,
 }) => {
   const inputRef = useRef<TextInput>(null);
   const [selection, setSelection] = useState({ start: 0, end: 0 });
+  const historyRef = useRef<string[]>([]);
+  const historyIndexRef = useRef<number>(-1);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
 
   const handleSelectionChange = useCallback((e: any) => {
     setSelection({
@@ -40,6 +48,56 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
       end: e.nativeEvent.selection.end,
     });
   }, []);
+
+  // Add to history
+  const addToHistory = useCallback((newValue: string) => {
+    // Remove any history after current index (for redo)
+    historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
+    historyRef.current.push(newValue);
+    historyIndexRef.current = historyRef.current.length - 1;
+    
+    // Limit history size
+    if (historyRef.current.length > 50) {
+      historyRef.current.shift();
+      historyIndexRef.current--;
+    }
+    
+    setCanUndo(historyIndexRef.current > 0);
+    setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
+  }, []);
+
+  // Initialize history
+  React.useEffect(() => {
+    if (historyRef.current.length === 0) {
+      historyRef.current = [value];
+      historyIndexRef.current = 0;
+    }
+  }, []);
+
+  const handleChange = useCallback((newValue: string) => {
+    addToHistory(newValue);
+    onChange(newValue);
+  }, [onChange, addToHistory]);
+
+  const undo = useCallback(() => {
+    if (historyIndexRef.current > 0) {
+      historyIndexRef.current--;
+      const previousValue = historyRef.current[historyIndexRef.current];
+      onChange(previousValue);
+      setCanUndo(historyIndexRef.current > 0);
+      setCanRedo(true);
+    }
+  }, [onChange]);
+
+  const redo = useCallback(() => {
+    if (historyIndexRef.current < historyRef.current.length - 1) {
+      historyIndexRef.current++;
+      const nextValue = historyRef.current[historyIndexRef.current];
+      onChange(nextValue);
+      setCanUndo(true);
+      setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
+    }
+  }, [onChange]);
 
   const applyFormat = useCallback(
     (format: FormatType) => {
@@ -76,7 +134,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
       }
 
       const newValue = beforeText + formattedText + afterText;
-      onChange(newValue);
+      handleChange(newValue);
 
       // Reset selection after formatting
       setTimeout(() => {
@@ -88,8 +146,10 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
         });
       }, 0);
     },
-    [value, selection, onChange]
+    [value, selection, handleChange]
   );
+
+  const wordCount = value.trim().split(/\s+/).filter(word => word.length > 0).length;
 
   return (
     <KeyboardAvoidingView
@@ -98,34 +158,82 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
       <View style={styles.toolbar}>
-        <TouchableOpacity
-          style={styles.toolbarButton}
-          onPress={() => applyFormat('bold')}
-          accessibilityLabel="Bold"
-        >
-          <MaterialCommunityIcons name="format-bold" size={20} color={Colors.text.primary} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.toolbarButton}
-          onPress={() => applyFormat('italic')}
-          accessibilityLabel="Italic"
-        >
-          <MaterialCommunityIcons name="format-italic" size={20} color={Colors.text.primary} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.toolbarButton}
-          onPress={() => applyFormat('heading')}
-          accessibilityLabel="Heading"
-        >
-          <MaterialCommunityIcons name="format-header-1" size={20} color={Colors.text.primary} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.toolbarButton}
-          onPress={() => applyFormat('list')}
-          accessibilityLabel="List"
-        >
-          <MaterialCommunityIcons name="format-list-bulleted" size={20} color={Colors.text.primary} />
-        </TouchableOpacity>
+        <View style={styles.toolbarGroup}>
+          <TouchableOpacity
+            style={[styles.toolbarButton, !canUndo && styles.toolbarButtonDisabled]}
+            onPress={undo}
+            disabled={!canUndo}
+            accessibilityLabel="Undo"
+          >
+            <MaterialCommunityIcons 
+              name="undo" 
+              size={20} 
+              color={canUndo ? Colors.text.primary : Colors.text.tertiary} 
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.toolbarButton, !canRedo && styles.toolbarButtonDisabled]}
+            onPress={redo}
+            disabled={!canRedo}
+            accessibilityLabel="Redo"
+          >
+            <MaterialCommunityIcons 
+              name="redo" 
+              size={20} 
+              color={canRedo ? Colors.text.primary : Colors.text.tertiary} 
+            />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.toolbarDivider} />
+        <View style={styles.toolbarGroup}>
+          <TouchableOpacity
+            style={styles.toolbarButton}
+            onPress={() => applyFormat('bold')}
+            accessibilityLabel="Bold"
+          >
+            <MaterialCommunityIcons name="format-bold" size={20} color={Colors.text.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.toolbarButton}
+            onPress={() => applyFormat('italic')}
+            accessibilityLabel="Italic"
+          >
+            <MaterialCommunityIcons name="format-italic" size={20} color={Colors.text.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.toolbarButton}
+            onPress={() => applyFormat('underline')}
+            accessibilityLabel="Underline"
+          >
+            <MaterialCommunityIcons name="format-underline" size={20} color={Colors.text.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.toolbarButton}
+            onPress={() => applyFormat('heading')}
+            accessibilityLabel="Heading"
+          >
+            <MaterialCommunityIcons name="format-header-1" size={20} color={Colors.text.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.toolbarButton}
+            onPress={() => applyFormat('list')}
+            accessibilityLabel="List"
+          >
+            <MaterialCommunityIcons name="format-list-bulleted" size={20} color={Colors.text.primary} />
+          </TouchableOpacity>
+        </View>
+        {onSave && (
+          <>
+            <View style={styles.toolbarDivider} />
+            <TouchableOpacity
+              style={styles.toolbarButton}
+              onPress={onSave}
+              accessibilityLabel="Save"
+            >
+              <MaterialCommunityIcons name="content-save" size={20} color={Colors.primary.purple} />
+            </TouchableOpacity>
+          </>
+        )}
       </View>
 
       <ScrollView
@@ -137,7 +245,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
           ref={inputRef}
           style={[styles.input, { minHeight }]}
           value={value}
-          onChangeText={onChange}
+          onChangeText={handleChange}
           onSelectionChange={handleSelectionChange}
           placeholder={placeholder}
           placeholderTextColor={Colors.text.quaternary}
@@ -149,9 +257,11 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
       </ScrollView>
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>
-          {value.length} characters
-        </Text>
+        {showWordCount && (
+          <Text style={styles.footerText}>
+            {wordCount} words • {value.length} characters
+          </Text>
+        )}
         <Text style={styles.footerText}>
           Markdown supported
         </Text>
@@ -167,17 +277,31 @@ const styles = StyleSheet.create({
   },
   toolbar: {
     flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 8,
     backgroundColor: Colors.background.surface,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border.subtle,
   },
+  toolbarGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  toolbarDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: Colors.border.subtle,
+    marginHorizontal: 8,
+  },
   toolbarButton: {
     padding: 8,
-    marginRight: 8,
+    marginRight: 4,
     borderRadius: 8,
     backgroundColor: Colors.background.glass,
+  },
+  toolbarButtonDisabled: {
+    opacity: 0.5,
   },
   scrollView: {
     flex: 1,
