@@ -41,11 +41,36 @@ export const errorHandler = (
   // Don't leak error details in production
   const isDevelopment = process.env.NODE_ENV === "development";
 
+  // Provide user-friendly error messages for common scenarios
+  let userMessage = message;
+  if (statusCode === 429) {
+    if (message.includes('limit')) {
+      userMessage = message; // Keep limit messages as-is
+    } else {
+      userMessage = "Too many requests. Please try again later.";
+    }
+  } else if (statusCode === 400) {
+    // Validation errors - keep original message
+    userMessage = message;
+  } else if (statusCode === 401) {
+    userMessage = "Authentication required. Please log in.";
+  } else if (statusCode === 403) {
+    userMessage = "You don't have permission to perform this action.";
+  } else if (statusCode === 404) {
+    userMessage = message || "Resource not found.";
+  } else if (statusCode >= 500) {
+    userMessage = isDevelopment ? message : "An unexpected error occurred. Please try again later.";
+  }
+
   res.status(statusCode).json({
     success: false,
     error: {
-      message: isDevelopment ? message : statusCode >= 500 ? "Internal Server Error" : message,
-      ...(isDevelopment && { stack: err.stack }),
+      message: userMessage,
+      code: statusCode,
+      ...(isDevelopment && { 
+        stack: err.stack,
+        originalMessage: message,
+      }),
     },
   });
 };
