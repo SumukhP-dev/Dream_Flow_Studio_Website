@@ -5,11 +5,10 @@ import { createError } from "../middleware/errorHandler";
 import { uploadLimiter } from "../middleware/rateLimiter";
 import { sanitizeString } from "../utils/validation";
 import { getStorageService } from "../services/storageService";
-import { PrismaClient } from "@prisma/client";
+import { prismaClient as prisma } from "../utils/prisma";
 import { logInfo, logError } from "../utils/logger";
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Configure multer for file uploads
 const upload = multer({

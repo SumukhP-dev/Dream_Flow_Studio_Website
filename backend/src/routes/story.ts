@@ -8,11 +8,10 @@ import {
   sanitizeString,
   sanitizeHTML,
 } from "../utils/validation";
-import { PrismaClient } from "@prisma/client";
+import { prismaClient as prisma } from "../utils/prisma";
 import { generateStory } from "../services/storyService";
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // All story routes require authentication
 router.use(authenticate);

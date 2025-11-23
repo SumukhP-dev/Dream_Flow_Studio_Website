@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { logError } from "../utils/logger";
+import { captureException } from "../utils/sentry";
 
 export interface AppError extends Error {
   statusCode?: number;
@@ -24,6 +25,18 @@ export const errorHandler = (
     userId: (req as any).userId,
     isOperational: err.isOperational,
   });
+
+  // Send to Sentry for non-operational errors (real bugs)
+  if (!err.isOperational && statusCode >= 500) {
+    captureException(err, {
+      request: {
+        path: req.path,
+        method: req.method,
+        ip: req.ip,
+        userId: (req as any).userId,
+      },
+    });
+  }
 
   // Don't leak error details in production
   const isDevelopment = process.env.NODE_ENV === "development";
