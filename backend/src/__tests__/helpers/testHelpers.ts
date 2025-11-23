@@ -61,9 +61,11 @@ export async function createTestUser(
 /**
  * Generate a JWT token for a test user
  */
-export function generateTestToken(userId: string, email: string): string {
+export function generateTestToken(userId: string, email: string, type: 'access' | 'refresh' = 'access'): string {
   const JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
-  return jwt.sign({ userId, email }, JWT_SECRET, { expiresIn: '7d' });
+  const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || JWT_SECRET + '_refresh';
+  const secret = type === 'access' ? JWT_SECRET : JWT_REFRESH_SECRET;
+  return jwt.sign({ userId, email, type }, secret, { expiresIn: type === 'access' ? '15m' : '30d' });
 }
 
 /**
@@ -120,6 +122,8 @@ export async function cleanupTestData() {
   const prisma = getPrismaClient();
   await prisma.story.deleteMany();
   await prisma.asset.deleteMany();
+  await prisma.refreshToken.deleteMany();
+  await prisma.passwordResetToken.deleteMany();
   await prisma.user.deleteMany();
   await prisma.$disconnect();
 }

@@ -372,5 +372,108 @@ describe('Story Routes', () => {
       expect(response.status).toBe(404); // Should return 404, not 403
     });
   });
+
+  describe('Edge Cases', () => {
+    (hasDatabase ? it : it.skip)('should not allow updating another user\'s story', async () => {
+      const otherUser = await createTestUser({ email: 'other@example.com' });
+      const otherStory = await createTestStory(otherUser.id);
+
+      const response = await request(app)
+        .put(`/api/v1/story/${otherStory.id}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          title: 'Hacked Title',
+        });
+
+      expect(response.status).toBe(404);
+    });
+
+    (hasDatabase ? it : it.skip)('should not allow getting another user\'s story', async () => {
+      const otherUser = await createTestUser({ email: 'other@example.com' });
+      const otherStory = await createTestStory(otherUser.id);
+
+      const response = await request(app)
+        .get(`/api/v1/story/${otherStory.id}`)
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(404);
+    });
+
+    (hasDatabase ? it : it.skip)('should handle very long prompt', async () => {
+      const longPrompt = 'A'.repeat(1000); // Exactly 1000 characters
+      const response = await request(app)
+        .post('/api/v1/story')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          prompt: longPrompt,
+        });
+
+      expect(response.status).toBe(201);
+    });
+
+    (hasDatabase ? it : it.skip)('should handle prompt at minimum length', async () => {
+      const minPrompt = 'A'.repeat(10); // Exactly 10 characters
+      const response = await request(app)
+        .post('/api/v1/story')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          prompt: minPrompt,
+        });
+
+      expect(response.status).toBe(201);
+    });
+
+    it('should reject prompt exceeding maximum length', async () => {
+      const longPrompt = 'A'.repeat(1001); // Exceeds 1000 characters
+      const response = await request(app)
+        .post('/api/v1/story')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          prompt: longPrompt,
+        });
+
+      expect(response.status).toBe(400);
+    });
+
+    (hasDatabase ? it : it.skip)('should handle story with special characters in theme', async () => {
+      const response = await request(app)
+        .post('/api/v1/story')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          prompt: 'A story about nature',
+          theme: 'nature-adventure',
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.story.theme).toBe('nature-adventure');
+    });
+
+    (hasDatabase ? it : it.skip)('should handle story with empty parameters object', async () => {
+      const response = await request(app)
+        .post('/api/v1/story')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          prompt: 'A story',
+          parameters: {},
+        });
+
+      expect(response.status).toBe(201);
+    });
+
+    (hasDatabase ? it : it.skip)('should handle update with only partial fields', async () => {
+      const story = await createTestStory(testUser.id, { title: 'Original Title' });
+      
+      const response = await request(app)
+        .put(`/api/v1/story/${story.id}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          title: 'Updated Title',
+          // content and theme not provided
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.story.title).toBe('Updated Title');
+    });
+  });
 });
 

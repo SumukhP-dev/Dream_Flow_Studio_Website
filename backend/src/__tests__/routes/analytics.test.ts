@@ -63,10 +63,13 @@ describe('Analytics Routes', () => {
       expect(response.body.success).toBe(true);
       expect(response.body.analytics).toHaveProperty('totalStories');
       expect(response.body.analytics.totalStories).toBe(3);
-      expect(response.body.analytics).toHaveProperty('totalViews');
-      expect(response.body.analytics).toHaveProperty('averageGenerationTime');
+      expect(response.body.analytics).toHaveProperty('averageStoryLength');
+      expect(response.body.analytics).toHaveProperty('storiesWithMedia');
       expect(response.body.analytics).toHaveProperty('popularThemes');
       expect(response.body.analytics).toHaveProperty('usageByDate');
+      expect(response.body.analytics).toHaveProperty('recentActivity');
+      expect(response.body.analytics.popularThemes).toBeInstanceOf(Array);
+      expect(response.body.analytics.usageByDate).toBeInstanceOf(Array);
     });
 
     (hasDatabase ? it : it.skip)('should return zero stories for user with no stories', async () => {
@@ -108,9 +111,12 @@ describe('Analytics Routes', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
-      expect(response.body.analytics).toHaveProperty('views');
-      expect(response.body.analytics).toHaveProperty('completions');
-      expect(response.body.analytics).toHaveProperty('averageWatchTime');
+      expect(response.body.analytics).toHaveProperty('storyId');
+      expect(response.body.analytics).toHaveProperty('title');
+      expect(response.body.analytics).toHaveProperty('wordCount');
+      expect(response.body.analytics).toHaveProperty('readingTimeMinutes');
+      expect(response.body.analytics).toHaveProperty('hasVideo');
+      expect(response.body.analytics).toHaveProperty('hasAudio');
     });
 
     (hasDatabase ? it : it.skip)('should reject getting analytics for non-existent story', async () => {
@@ -118,9 +124,8 @@ describe('Analytics Routes', () => {
         .get('/api/v1/analytics/story/non-existent-id')
         .set('Authorization', `Bearer ${authToken}`);
 
-      // Should still return 200 with default analytics
-      expect(response.status).toBe(200);
-      expect(response.body.analytics).toBeDefined();
+      expect(response.status).toBe(404);
+      expect(response.body.error.message).toContain('Story not found');
     });
 
     it('should reject without authentication', async () => {
