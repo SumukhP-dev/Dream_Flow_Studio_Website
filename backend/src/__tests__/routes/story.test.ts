@@ -188,6 +188,344 @@ describe('Story Routes', () => {
 
       expect(response.status).toBe(401);
     });
+
+    (hasDatabase ? it : it.skip)('should support pagination', async () => {
+      // Create multiple stories
+      for (let i = 0; i < 25; i++) {
+        await createTestStory(testUser.id, { title: `Story ${i}` });
+      }
+
+      const page1 = await request(app)
+        .get('/api/v1/story/history?page=1&limit=10')
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(page1.status).toBe(200);
+      expect(page1.body.stories).toHaveLength(10);
+      expect(page1.body.pagination.page).toBe(1);
+      expect(page1.body.pagination.limit).toBe(10);
+      expect(page1.body.pagination.total).toBeGreaterThanOrEqual(25);
+
+      const page2 = await request(app)
+        .get('/api/v1/story/history?page=2&limit=10')
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(page2.status).toBe(200);
+      expect(page2.body.stories).toHaveLength(10);
+      expect(page2.body.pagination.page).toBe(2);
+    });
+
+    (hasDatabase ? it : it.skip)('should filter by theme', async () => {
+      await createTestStory(testUser.id, { title: 'Nature Story', theme: 'nature' });
+      await createTestStory(testUser.id, { title: 'Fantasy Story', theme: 'fantasy' });
+      await createTestStory(testUser.id, { title: 'Another Nature Story', theme: 'nature' });
+
+      const response = await request(app)
+        .get('/api/v1/story/history?theme=nature')
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.stories.every((s: any) => s.theme === 'nature')).toBe(true);
+    });
+
+    (hasDatabase ? it : it.skip)('should search by title', async () => {
+      await createTestStory(testUser.id, { title: 'Ocean Adventure' });
+      await createTestStory(testUser.id, { title: 'Mountain Journey' });
+      await createTestStory(testUser.id, { title: 'Ocean Breeze' });
+
+      const response = await request(app)
+        .get('/api/v1/story/history?search=Ocean')
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.stories.length).toBeGreaterThanOrEqual(2);
+      expect(response.body.stories.every((s: any) => s.title.includes('Ocean'))).toBe(true);
+    });
+
+    (hasDatabase ? it : it.skip)('should search by content', async () => {
+      await createTestStory(testUser.id, {
+        title: 'Story 1',
+        content: 'This story is about the forest',
+      });
+      await createTestStory(testUser.id, {
+        title: 'Story 2',
+        content: 'This story is about the ocean',
+      });
+
+      const response = await request(app)
+        .get('/api/v1/story/history?search=forest')
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.stories.some((s: any) => s.content.includes('forest'))).toBe(true);
+    });
+
+    (hasDatabase ? it : it.skip)('should sort by createdAt descending (default)', async () => {
+      const story1 = await createTestStory(testUser.id, { title: 'First Story' });
+      await new Promise(resolve => setTimeout(resolve, 100)); // Small delay
+      const story2 = await createTestStory(testUser.id, { title: 'Second Story' });
+
+      const response = await request(app)
+        .get('/api/v1/story/history')
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(200);
+      const firstStory = response.body.stories[0];
+      expect(firstStory.id).toBe(story2.id); // Most recent first
+    });
+
+    (hasDatabase ? it : it.skip)('should sort by title', async () => {
+      await createTestStory(testUser.id, { title: 'Zebra Story' });
+      await createTestStory(testUser.id, { title: 'Alpha Story' });
+      await createTestStory(testUser.id, { title: 'Beta Story' });
+
+      const response = await request(app)
+        .get('/api/v1/story/history?sortBy=title&sortOrder=asc')
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(200);
+      const titles = response.body.stories.map((s: any) => s.title);
+      expect(titles).toContain('Alpha Story');
+      expect(titles).toContain('Beta Story');
+      expect(titles).toContain('Zebra Story');
+    });
+
+    (hasDatabase ? it : it.skip)('should filter by hasVideo', async () => {
+      await createTestStory(testUser.id, {
+        title: 'Story with Video',
+        videoUrl: 'https://storage.example.com/video.mp4',
+      });
+      await createTestStory(testUser.id, {
+        title: 'Story without Video',
+        videoUrl: null,
+      });
+
+      const response = await request(app)
+        .get('/api/v1/story/history?hasVideo=true')
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.stories.every((s: any) => s.videoUrl && s.videoUrl !== 'pending' && s.videoUrl !== 'processing' && s.videoUrl !== 'failed')).toBe(true);
+    });
+
+    (hasDatabase ? it : it.skip)('should filter by hasAudio', async () => {
+      await createTestStory(testUser.id, {
+        title: 'Story with Audio',
+        audioUrl: 'https://storage.example.com/audio.mp3',
+      });
+      await createTestStory(testUser.id, {
+        title: 'Story without Audio',
+        audioUrl: null,
+      });
+
+      const response = await request(app)
+        .get('/api/v1/story/history?hasAudio=true')
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.stories.every((s: any) => s.audioUrl && s.audioUrl !== 'pending' && s.audioUrl !== 'processing' && s.audioUrl !== 'failed')).toBe(true);
+    });
+
+    (hasDatabase ? it : it.skip)('should combine filters', async () => {
+      await createTestStory(testUser.id, {
+        title: 'Nature Story with Video',
+        theme: 'nature',
+        videoUrl: 'https://storage.example.com/video.mp4',
+      });
+      await createTestStory(testUser.id, {
+        title: 'Fantasy Story with Video',
+        theme: 'fantasy',
+        videoUrl: 'https://storage.example.com/video2.mp4',
+      });
+      await createTestStory(testUser.id, {
+        title: 'Nature Story without Video',
+        theme: 'nature',
+        videoUrl: null,
+      });
+
+      const response = await request(app)
+        .get('/api/v1/story/history?theme=nature&hasVideo=true')
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.stories.every((s: any) => s.theme === 'nature' && s.videoUrl)).toBe(true);
+    });
+
+    (hasDatabase ? it : it.skip)('should limit max items per page', async () => {
+      for (let i = 0; i < 150; i++) {
+        await createTestStory(testUser.id, { title: `Story ${i}` });
+      }
+
+      const response = await request(app)
+        .get('/api/v1/story/history?limit=200') // Try to request more than max
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.stories.length).toBeLessThanOrEqual(100); // Max limit
+      expect(response.body.pagination.limit).toBeLessThanOrEqual(100);
+    });
+  });
+
+  describe('GET /api/v1/story/:id/export', () => {
+    let storyId: string;
+
+    beforeEach(async () => {
+      if (hasDatabase) {
+        const story = await createTestStory(testUser.id);
+        storyId = story.id;
+      } else {
+        storyId = 'test-story-id';
+      }
+    });
+
+    (hasDatabase ? it : it.skip)('should export story as PDF', async () => {
+      const response = await request(app)
+        .get(`/api/v1/story/${storyId}/export?format=pdf`)
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.headers['content-type']).toContain('application/pdf');
+      expect(response.headers['content-disposition']).toContain('attachment');
+    });
+
+    (hasDatabase ? it : it.skip)('should export story as Markdown', async () => {
+      const response = await request(app)
+        .get(`/api/v1/story/${storyId}/export?format=markdown`)
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.headers['content-type']).toContain('text/markdown');
+      expect(response.text).toContain('#');
+    });
+
+    (hasDatabase ? it : it.skip)('should export story as JSON', async () => {
+      const response = await request(app)
+        .get(`/api/v1/story/${storyId}/export?format=json`)
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.headers['content-type']).toContain('application/json');
+      const data = JSON.parse(response.text);
+      expect(data).toHaveProperty('title');
+      expect(data).toHaveProperty('content');
+    });
+
+    (hasDatabase ? it : it.skip)('should include metadata when requested', async () => {
+      const response = await request(app)
+        .get(`/api/v1/story/${storyId}/export?format=json&includeMetadata=true`)
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(200);
+      const data = JSON.parse(response.text);
+      expect(data.metadata).toBeDefined();
+      expect(data.metadata.id).toBe(storyId);
+    });
+
+    it('should reject invalid format', async () => {
+      const response = await request(app)
+        .get(`/api/v1/story/${storyId}/export?format=invalid`)
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(400);
+    });
+
+    it('should reject without authentication', async () => {
+      const response = await request(app)
+        .get(`/api/v1/story/${storyId}/export?format=pdf`);
+
+      expect(response.status).toBe(401);
+    });
+
+    (hasDatabase ? it : it.skip)('should reject exporting another user\'s story', async () => {
+      const otherUser = await createTestUser({ email: 'other@example.com' });
+      const otherStory = await createTestStory(otherUser.id);
+
+      const response = await request(app)
+        .get(`/api/v1/story/${otherStory.id}/export?format=pdf`)
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(404);
+    });
+  });
+
+  describe('GET /api/v1/story/:id/media/status', () => {
+    let storyId: string;
+
+    beforeEach(async () => {
+      if (hasDatabase) {
+        const story = await createTestStory(testUser.id);
+        storyId = story.id;
+      } else {
+        storyId = 'test-story-id';
+      }
+    });
+
+    (hasDatabase ? it : it.skip)('should get media status', async () => {
+      const response = await request(app)
+        .get(`/api/v1/story/${storyId}/media/status`)
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.status).toHaveProperty('video');
+      expect(response.body.status).toHaveProperty('audio');
+    });
+
+    it('should reject without authentication', async () => {
+      const response = await request(app)
+        .get(`/api/v1/story/${storyId}/media/status`);
+
+      expect(response.status).toBe(401);
+    });
+  });
+
+  describe('POST /api/v1/story/:id/media/regenerate', () => {
+    let storyId: string;
+
+    beforeEach(async () => {
+      if (hasDatabase) {
+        const story = await createTestStory(testUser.id);
+        storyId = story.id;
+      } else {
+        storyId = 'test-story-id';
+      }
+    });
+
+    (hasDatabase ? it : it.skip)('should regenerate video', async () => {
+      const response = await request(app)
+        .post(`/api/v1/story/${storyId}/media/regenerate`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ type: 'video' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+    });
+
+    (hasDatabase ? it : it.skip)('should regenerate audio', async () => {
+      const response = await request(app)
+        .post(`/api/v1/story/${storyId}/media/regenerate`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ type: 'audio' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+    });
+
+    it('should reject invalid type', async () => {
+      const response = await request(app)
+        .post(`/api/v1/story/${storyId}/media/regenerate`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ type: 'invalid' });
+
+      expect(response.status).toBe(400);
+    });
+
+    it('should reject without authentication', async () => {
+      const response = await request(app)
+        .post(`/api/v1/story/${storyId}/media/regenerate`)
+        .send({ type: 'video' });
+
+      expect(response.status).toBe(401);
+    });
   });
 
   describe('GET /api/v1/story/:id', () => {
