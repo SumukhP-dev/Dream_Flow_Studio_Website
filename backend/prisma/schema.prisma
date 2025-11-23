@@ -40,6 +40,9 @@ model Story {
 
   @@index([userId])
   @@index([createdAt])
+  @@index([theme])
+  @@index([userId, createdAt])
+  @@index([userId, theme])
 }
 
 model Asset {
@@ -83,6 +86,23 @@ model PasswordResetToken {
   @@index([userId])
   @@index([token])
   @@index([expiresAt])
+}
+
+model MediaGenerationCost {
+  id        String   @id @default(cuid())
+  userId    String
+  storyId   String
+  type      String   // 'video' or 'audio'
+  provider  String   // 'runwayml', 'openai', 'elevenlabs', 'placeholder'
+  cost      Float    @default(0)
+  status    String   // 'pending', 'processing', 'completed', 'failed'
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([storyId])
+  @@index([type])
+  @@index([createdAt])
+  @@index([userId, createdAt])
 }
 
 
