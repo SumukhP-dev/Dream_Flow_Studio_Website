@@ -1,0 +1,129 @@
+name: Deploy
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+jobs:
+  deploy-backend:
+    name: Deploy Backend
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'staging' }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: ./backend
+        run: npm ci
+      
+      - name: Generate Prisma Client
+        working-directory: ./backend
+        run: npm run db:generate
+      
+      - name: Build backend
+        working-directory: ./backend
+        run: npm run build
+      
+      - name: Run database migrations
+        working-directory: ./backend
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        continue-on-error: true
+      
+      - name: Deploy to production
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+        run: |
+          echo "Deployment steps would go here"
+          echo "Examples:"
+          echo "- Deploy to AWS ECS/EC2"
+          echo "- Deploy to Railway/Render"
+          echo "- Deploy to Docker registry"
+          echo "- Update Kubernetes deployment"
+        # Uncomment and configure based on your deployment target:
+        # - name: Deploy to Railway
+        #   uses: bervProject/railway-deploy@master
+        #   with:
+        #     railway_token: ${{ secrets.RAILWAY_TOKEN }}
+        #     service: backend
+
+  deploy-frontend:
+    name: Deploy Frontend
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'staging' }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm ci
+      
+      - name: Build frontend
+        working-directory: ./frontend
+        run: npm run build:web
+        env:
+          EXPO_PUBLIC_API_BASE_URL: ${{ secrets.API_BASE_URL }}
+      
+      - name: Deploy to production
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+        run: |
+          echo "Frontend deployment steps would go here"
+          echo "Examples:"
+          echo "- Deploy to Vercel"
+          echo "- Deploy to Netlify"
+          echo "- Deploy to S3 + CloudFront"
+          echo "- Deploy static files to CDN"
+        # Uncomment and configure based on your deployment target:
+        # - name: Deploy to Vercel
+        #   uses: amondnet/vercel-action@v20
+        #   with:
+        #     vercel-token: ${{ secrets.VERCEL_TOKEN }}
+        #     vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+        #     vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+        #     working-directory: ./frontend
+
+  notify:
+    name: Notify Deployment
+    runs-on: ubuntu-latest
+    needs: [deploy-backend, deploy-frontend]
+    if: always()
+    
+    steps:
+      - name: Deployment Status
+        run: |
+          if [ "${{ needs.deploy-backend.result }}" == "success" ] && [ "${{ needs.deploy-frontend.result }}" == "success" ]; then
+            echo "✅ Deployment successful"
+          else
+            echo "❌ Deployment failed"
+            exit 1
+          fi
+        # Add notification steps (Slack, Discord, email, etc.)
+
