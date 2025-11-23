@@ -16,6 +16,7 @@ import { assetsRoutes } from "./routes/assets";
 import { analyticsRoutes } from "./routes/analytics";
 import { validateEnvironment, getCorsOrigins } from "./utils/envValidation";
 import { initializeSentry } from "./utils/sentry";
+import { initializeMediaService } from "./services/mediaService";
 
 dotenv.config();
 
@@ -103,25 +104,67 @@ app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Health check
 app.get("/health", async (req, res) => {
+  const healthStatus: any = {
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || "development",
+    services: {},
+  };
+
+  let overallStatus = "ok";
+
+  // Check database
   try {
     const { prismaClient } = await import("./utils/prisma");
-    // Test database connection
     await prismaClient.$queryRaw`SELECT 1`;
-    
-    res.json({ 
-      status: "ok", 
-      timestamp: new Date().toISOString(),
-      database: "connected",
-      environment: process.env.NODE_ENV || "development",
-    });
+    healthStatus.services.database = "connected";
   } catch (error) {
-    res.status(503).json({ 
-      status: "error", 
-      timestamp: new Date().toISOString(),
-      database: "disconnected",
-      error: process.env.NODE_ENV === 'development' ? (error as Error).message : undefined,
-    });
+    healthStatus.services.database = "disconnected";
+    overallStatus = "degraded";
+    if (process.env.NODE_ENV === 'development') {
+      healthStatus.services.databaseError = (error as Error).message;
+    }
   }
+
+  // Check Redis
+  try {
+    const Redis = (await import('ioredis')).default;
+    const redis = new Redis({
+      host: process.env.REDIS_HOST || 'localhost',
+      port: parseInt(process.env.REDIS_PORT || '6379'),
+      password: process.env.REDIS_PASSWORD,
+      maxRetriesPerRequest: null,
+      lazyConnect: true,
+      connectTimeout: 2000,
+    });
+    await redis.ping();
+    await redis.quit();
+    healthStatus.services.redis = "connected";
+  } catch (error) {
+    healthStatus.services.redis = "disconnected";
+    // Redis is optional, so don't mark as degraded
+    if (process.env.NODE_ENV === 'development') {
+      healthStatus.services.redisError = (error as Error).message;
+    }
+  }
+
+  // Check storage service
+  try {
+    const { getStorageService } = await import("./services/storageService");
+    const storage = getStorageService();
+    // Try to get a test URL (this will fail if not configured, but won't throw)
+    healthStatus.services.storage = "configured";
+  } catch (error) {
+    healthStatus.services.storage = "not_configured";
+    // Storage is optional, so don't mark as degraded
+    if (process.env.NODE_ENV === 'development') {
+      healthStatus.services.storageError = (error as Error).message;
+    }
+  }
+
+  healthStatus.status = overallStatus;
+  const statusCode = overallStatus === "ok" ? 200 : 503;
+  res.status(statusCode).json(healthStatus);
 });
 
 // API Routes
@@ -129,12 +172,18 @@ app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/story", storyRoutes);
 app.use("/api/v1/assets", assetsRoutes);
 app.use("/api/v1/analytics", analyticsRoutes);
+app.use("/api/v1/admin", adminRoutes);
 
 // Error handling
 app.use(errorHandler);
 
 // Start server only if not in test mode
 if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID) {
+  // Initialize media generation service
+  initializeMediaService().catch((error) => {
+    logger.warn('Failed to initialize media service', { error });
+  });
+
   app.listen(PORT, () => {
     logger.info(`Server running on port ${PORT}`, { port: PORT });
     logger.info(`API Documentation: http://localhost:${PORT}/api-docs`);
