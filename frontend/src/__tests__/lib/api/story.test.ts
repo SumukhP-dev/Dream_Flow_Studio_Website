@@ -1,5 +1,5 @@
 import { storyApi } from '@/lib/api/story';
-import { server } from '../mocks/server';
+import { server } from '../../mocks/server';
 import { http, HttpResponse } from 'msw';
 
 describe('Story API', () => {

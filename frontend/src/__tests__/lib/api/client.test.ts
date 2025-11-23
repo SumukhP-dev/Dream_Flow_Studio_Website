@@ -1,5 +1,5 @@
 import apiClient from '@/lib/api/client';
-import { server } from '../mocks/server';
+import { server } from '../../mocks/server';
 import { http, HttpResponse } from 'msw';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
